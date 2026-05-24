@@ -1,0 +1,886 @@
+import './style.css';
+
+const characters = [
+    { id: 'gojo', name: 'Gojo', domain: 'Unlimited Void', desc: "Transmits infinite information, paralyzing the target.", colors: [[255, 255, 255], [200, 200, 200], [100, 100, 100]], asset: '/assets/black_hole.png' },
+    { id: 'sukuna', name: 'Sukuna', domain: 'Malevolent Shrine', desc: "A divine shrine that slashes everything in range.", colors: [[255, 30, 30], [150, 0, 0], [45, 52, 54]], asset: '/assets/sukuna.png' },
+    { id: 'megumi', name: 'Megumi', domain: 'Shadow Garden', desc: "Fills the area with shadows and summoned beasts.", colors: [[0, 255, 255], [0, 168, 255], [255, 255, 255]], asset: '/assets/megumi.png' },
+    { id: 'mahito', name: 'Mahito', domain: 'Self-Perfection', desc: "Directly transfigures souls within its reach.", colors: [[255, 126, 185], [255, 180, 200], [223, 230, 233]], asset: '/assets/mahito.png' },
+    { id: 'jogo', name: 'Jogo', domain: 'Iron Mountain', desc: "Incinerates targets inside an active volcanic space.", colors: [[255, 69, 0], [255, 140, 0], [255, 215, 0]], asset: '/assets/jogo.png' },
+    { id: 'hakari', name: 'Hakari', domain: 'Death Gamble', desc: "A Pachinko game granting infinite energy.", colors: [[255, 0, 150], [0, 168, 255], [255, 215, 0]], asset: '/assets/hakari.png' }
+];
+
+const IDLE_PALETTE = [[255, 255, 255], [200, 200, 255], [162, 155, 254], [108, 92, 231]];
+
+const V_SHADER = `
+precision highp float;
+attribute vec3 a_pos;
+attribute vec3 a_target;
+attribute vec3 a_color;
+attribute float a_size;
+attribute float a_id;
+attribute float a_tag;
+
+uniform vec2 u_res;
+uniform float u_time;
+uniform float u_transition;
+uniform int u_char_id;
+uniform vec2 u_center;
+uniform vec2 u_mouse;
+uniform vec2 u_rotation;
+uniform float u_mousedown;
+uniform float u_technique;
+uniform float u_tech_time;
+
+varying vec3 v_color;
+varying float v_alpha;
+
+float hash(float n) { return fract(sin(n) * 43758.5453123); }
+float hash2(float n) { return fract(cos(n * 127.1) * 311.7); }
+
+void main() {
+    float phase1 = clamp(u_transition * 2.0, 0.0, 1.0);
+    float phase2 = clamp((u_transition - 0.5) * 2.0, 0.0, 1.0);
+    float ep1 = phase1 * phase1 * (3.0 - 2.0 * phase1);
+    float ep2 = phase2 * phase2 * (3.0 - 2.0 * phase2);
+
+    vec3 scatter_dir = vec3(hash(a_id) - 0.5, hash2(a_id) - 0.5, hash(a_id + 50.0) - 0.5) * u_res.x * 1.5;
+    vec3 dispersed = a_pos + scatter_dir * ep1;
+
+    vec3 pos = mix(dispersed, a_target, ep2);
+
+    // Orbit Controls Rotation
+    float rotX = u_rotation.x;
+    float rotY = u_rotation.y;
+    
+    float cx = cos(rotX), sx = sin(rotX);
+    float cy = cos(rotY), sy = sin(rotY);
+    
+    mat3 rx = mat3(1.0, 0.0, 0.0, 0.0, cx, -sx, 0.0, sx, cx);
+    mat3 ry = mat3(cy, 0.0, sy, 0.0, 1.0, 0.0, -sy, 0.0, cy);
+    
+    // Local Character Animations (Before Orbit Rotation)
+    if (a_tag > 0.5) {
+        if (u_char_id == 1) { 
+            float gojo_expand = sin(ep1 * 3.14) * 150.0;
+            pos += normalize(pos + vec3(0.001)) * gojo_expand;
+            
+            float gojo_spin = u_time * 0.012; 
+            float c = cos(gojo_spin), s = sin(gojo_spin);
+            pos.xy = mat2(c, -s, s, c) * pos.xy;
+            
+            pos.y += sin(u_time * 0.002 + pos.x * 0.01) * 15.0;
+        }
+        else if (u_char_id == 2) { 
+            float slash = sin(u_time * 0.006 + length(pos)*0.01 + a_id) * 5.0;
+            pos.x += slash; pos.y -= slash * 0.5;
+        }
+        else if (u_char_id == 3) { // Megumi: Abyssal Vortex
+            float speed = u_time * 0.01;
+            float c = cos(speed), s = sin(speed);
+            pos.xz = mat2(c, -s, s, c) * pos.xz;
+            
+            // Radial Waves (Rolling Floor)
+            float dist_xz = length(pos.xz);
+            float waves = sin(dist_xz * 0.02 - u_time * 0.015) * 40.0;
+            pos.y += waves;
+
+            // Whipping Tendrils
+            if (a_id > 900.0) {
+                float whip = u_time * 0.005 + a_id;
+                pos.x += sin(whip) * 80.0;
+                pos.z += cos(whip * 0.8) * 80.0;
+                pos.y -= abs(sin(whip * 1.2)) * 120.0;
+            }
+        }
+        else if (u_char_id == 4) { // Mahito: Master-Hand Tunnel
+            // Rhythmic Soul-Clench (Heartbeat)
+            float clench = 1.0 + pow(abs(sin(u_time * 0.003)), 4.0) * 0.3;
+            pos.xz *= (1.0 / clench);
+            
+            float spin = u_time * 0.003;
+            float c = cos(spin), s = sin(spin);
+            pos.xz = mat2(c, -s, s, c) * pos.xz;
+        }
+        else if (u_char_id == 5) { 
+            // Jogo: Rotate along Y-axis solely
+            float jogo_roll = u_time * 0.004;
+            float c = cos(jogo_roll), s = sin(jogo_roll);
+            pos.xz = mat2(c, -s, s, c) * pos.xz;
+
+            if (a_id > 800.0) {
+                float lift = mod(u_time * 0.0008 + (a_id * 0.01), 1.0);
+                pos.y -= lift * 420.0;
+                pos.x += sin(u_time * 0.003 + a_id) * lift * 60.0;
+                pos.z += cos(u_time * 0.002 + a_id) * lift * 60.0;
+                v_alpha *= clamp(1.5 - lift * 2.0, 0.0, 1.0); // Fades later in the journey
+                v_color = vec3(1.0); 
+            }
+        }
+        else if (u_char_id == 6) { 
+            float spin = sin(u_time * 0.04 + a_id * 6.28) * 10.0;
+            pos.x += spin * (hash(a_id) - 0.5);
+            pos.z += spin * (hash2(a_id) - 0.5);
+        }
+    }
+
+    pos = ry * rx * pos;
+
+    if (a_tag > 0.5) {
+        v_color = a_color;
+        v_alpha = ep2 * 0.6 + 0.2;
+    } else {
+        // Cursed Energy Flow Field (Background)
+        float flow_t = u_time * 0.0004;
+        pos.x += sin(pos.y * 0.005 + flow_t + a_id) * 60.0;
+        pos.y += cos(pos.x * 0.005 + flow_t) * 60.0;
+        pos.z += sin(pos.x * 0.003 + flow_t + a_id * 3.14) * 40.0;
+
+        v_color = mix(a_color, vec3(1.0, 1.0, 1.0), 0.75);
+        v_alpha = 0.2 + 0.3 * sin(u_time * 0.002 + a_id * 6.28);
+    }
+
+    // --- Gojo Integrated Techniques ---
+    if (u_char_id == 1 && u_mousedown > 0.5) {
+        if (u_technique == 2.0) { // RED: Repulsion Blast
+            pos += normalize(pos + vec3(0.001)) * 140.0 * ep2;
+        } else if (u_technique == 3.0) { // PURPLE: Traveling Void
+            float p_t = (u_time - u_tech_time) * 0.15;
+            vec3 p_pos = vec3(mod(p_t, 1800.0) - 900.0, 0.0, 0.0);
+            float p_d = length(pos - p_pos);
+            if (p_d < 180.0) {
+                pos += normalize(pos - p_pos) * (180.0 - p_d) * 2.0;
+                v_color = vec3(0.7, 0.0, 1.0);
+            }
+        }
+    }
+
+    vec2 screen_proj_raw = pos.xy + u_center;
+    float m_dist = distance(screen_proj_raw, u_mouse);
+    if (m_dist < 200.0) {
+        float force = (200.0 - m_dist) * (a_tag > 0.5 ? 0.25 : 0.8);
+        vec2 dir = normalize(screen_proj_raw - u_mouse);
+        if (u_mousedown > 0.5 && u_technique < 1.1) { // Normal BLUE Attraction
+            pos.xy -= dir * force * 1.5;
+        } else if (u_mousedown < 0.5) {
+            pos.xy += dir * force; // Passive Repel
+        }
+    }
+
+    // Space-Time Twist
+    float twist = sin(u_time * 0.001) * 0.2 * ep2;
+    float dist = length(pos.xy);
+    float ang = atan(pos.y, pos.x) + twist * exp(-dist * 0.005);
+    pos.xy = vec2(cos(ang), sin(ang)) * dist;
+
+    float perspective = 1000.0 / (1000.0 - pos.z);
+    vec2 screen_pos = pos.xy * perspective + u_center;
+
+    float scatter_peak = ep1 * (1.0 - ep2);
+    gl_PointSize = a_size * perspective * (u_res.x / 1150.0 + 0.5) * (1.0 + scatter_peak * 1.0);
+
+    vec2 clip = (screen_pos / u_res) * 2.0 - 1.0;
+    float depth = pos.z / 2000.0;
+    gl_Position = vec4(clip.x, -clip.y, depth, 1.0);
+}
+`;
+
+const F_SHADER = `
+precision highp float;
+varying vec3 v_color;
+varying float v_alpha;
+void main() {
+    float d = distance(gl_PointCoord, vec2(0.5));
+    if (d > 0.5) discard;
+    float alpha = smoothstep(0.5, 0.1, d) * v_alpha;
+    gl_FragColor = vec4(v_color, alpha * 1.5);
+}
+`;
+
+const POST_V_SHADER = `
+attribute vec2 a_pos;
+varying vec2 v_uv;
+void main() {
+    v_uv = a_pos * 0.5 + 0.5;
+    gl_Position = vec4(a_pos, 0.0, 1.0);
+}
+`;
+
+const POST_F_SHADER = `
+precision highp float;
+uniform sampler2D u_tex;
+uniform float u_time;
+uniform vec2 u_res;
+varying vec2 v_uv;
+
+void main() {
+    vec2 uv = v_uv;
+    float dist = distance(uv, vec2(0.5));
+    
+    // Chromatic Aberration (Vignetted to edges for clarity)
+    float shift = 0.005 * smoothstep(0.2, 0.7, dist); 
+    float r = texture2D(u_tex, uv + vec2(shift, 0.0)).r;
+    float g = texture2D(u_tex, uv).g;
+    float b = texture2D(u_tex, uv - vec2(shift, 0.0)).b;
+    vec3 color = vec3(r, g, b);
+    
+    // Bloom Approximation
+    vec3 bloom = texture2D(u_tex, uv).rgb;
+    bloom += texture2D(u_tex, uv + vec2(0.002, 0.0)).rgb * 0.4;
+    bloom += texture2D(u_tex, uv - vec2(0.002, 0.0)).rgb * 0.4;
+    bloom += texture2D(u_tex, uv + vec2(0.0, 0.002)).rgb * 0.4;
+    bloom += texture2D(u_tex, uv - vec2(0.0, 0.002)).rgb * 0.4;
+    color += bloom * 0.4;
+
+    // Scanlines
+    float scanline = sin(uv.y * u_res.y * 1.5) * 0.05;
+    color -= scanline;
+
+    gl_FragColor = vec4(color, 1.0);
+}
+`;
+
+class ParticleSystem {
+    constructor() {
+        this.canvas = document.getElementById('particleCanvas');
+        this.gl = this.canvas.getContext('webgl', { alpha: true, depth: false });
+
+        this.particleCount = 400000;
+        this.dpr = window.devicePixelRatio || 1;
+
+        this.positions = new Float32Array(this.particleCount * 3);
+        this.targets = new Float32Array(this.particleCount * 3);
+        this.colors = new Float32Array(this.particleCount * 3);
+        this.sizes = new Float32Array(this.particleCount);
+        this.ids = new Float32Array(this.particleCount);
+        this.tags = new Float32Array(this.particleCount);
+
+        this.coordinateCache = {};
+        this.activeChar = null;
+        this.transition = 0;
+        this.startTime = Date.now();
+        this.mouse = [window.innerWidth / 2, window.innerHeight / 2];
+
+        // Orbit Controls State
+
+
+
+        this.rotX = 0;
+        this.rotY = 0;
+        this.targetRotX = 0;
+        this.targetRotY = 0;
+        this.isDragging = false;
+        this.lastMousePos = [0, 0];
+        
+        this.technique = 0; 
+        this.techTime = 0;
+
+        this.initWebGL();
+        this.resize();
+        this.initParticles();
+        this.setupEvents();
+
+        this.animate();
+    }
+
+    initWebGL() {
+        const gl = this.gl;
+        const vs = this.compileShader(gl, gl.VERTEX_SHADER, V_SHADER);
+        const fs = this.compileShader(gl, gl.FRAGMENT_SHADER, F_SHADER);
+        this.program = gl.createProgram();
+        gl.attachShader(this.program, vs);
+        gl.attachShader(this.program, fs);
+        gl.linkProgram(this.program);
+        gl.useProgram(this.program);
+
+        this.locs = {
+            pos: gl.getAttribLocation(this.program, 'a_pos'),
+            target: gl.getAttribLocation(this.program, 'a_target'),
+            color: gl.getAttribLocation(this.program, 'a_color'),
+            size: gl.getAttribLocation(this.program, 'a_size'),
+            id: gl.getAttribLocation(this.program, 'a_id'),
+            tag: gl.getAttribLocation(this.program, 'a_tag'),
+            res: gl.getUniformLocation(this.program, 'u_res'),
+            time: gl.getUniformLocation(this.program, 'u_time'),
+            trans: gl.getUniformLocation(this.program, 'u_transition'),
+            charId: gl.getUniformLocation(this.program, 'u_char_id'),
+            center: gl.getUniformLocation(this.program, 'u_center'),
+            mouse: gl.getUniformLocation(this.program, 'u_mouse'),
+            rotation: gl.getUniformLocation(this.program, 'u_rotation'),
+            mousedown: gl.getUniformLocation(this.program, 'u_mousedown'),
+            tech: gl.getUniformLocation(this.program, 'u_technique'),
+            techTime: gl.getUniformLocation(this.program, 'u_tech_time'),
+        };
+
+        // Post Processing Program the bloom calculations dijrv
+        const pvs = this.compileShader(gl, gl.VERTEX_SHADER, POST_V_SHADER);
+        const pfs = this.compileShader(gl, gl.FRAGMENT_SHADER, POST_F_SHADER);
+        this.postProgram = gl.createProgram();
+        gl.attachShader(this.postProgram, pvs);
+        gl.attachShader(this.postProgram, pfs);
+        gl.linkProgram(this.postProgram);
+        this.postLocs = {
+            pos: gl.getAttribLocation(this.postProgram, 'a_pos'),
+            tex: gl.getUniformLocation(this.postProgram, 'u_tex'),
+            time: gl.getUniformLocation(this.postProgram, 'u_time'),
+            res: gl.getUniformLocation(this.postProgram, 'u_res'),
+        };
+
+        this.bufs = {
+            pos: gl.createBuffer(),
+            target: gl.createBuffer(),
+            color: gl.createBuffer(),
+            size: gl.createBuffer(),
+            id: gl.createBuffer(),
+            tag: gl.createBuffer(),
+            quad: gl.createBuffer(),
+        };
+
+        // Quad Buffer i stole this logic from gemini dont kill me
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.bufs.quad);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, -1,1, 1,-1, 1,1]), gl.STATIC_DRAW);
+
+        // FBO Setup
+        this.fbo = gl.createFramebuffer();
+        this.fboTexture = gl.createTexture();
+        this.initFBO();
+
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE); 
+    }
+
+    compileShader(gl, type, src) {
+        const s = gl.createShader(type);
+        gl.shaderSource(s, src);
+        gl.compileShader(s);
+        return s;
+    }
+
+    resize() {
+        this.dpr = window.devicePixelRatio || 1;
+        const w = window.innerWidth;
+        const h = window.innerHeight;
+        this.canvas.width = w * this.dpr;
+        this.canvas.height = h * this.dpr;
+        this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+        this.gl.useProgram(this.program);
+        this.gl.uniform2f(this.locs.res, w, h);
+        
+        this.initFBO();
+    }
+
+    initFBO() {
+        const gl = this.gl;
+        const w = window.innerWidth * this.dpr;
+        const h = window.innerHeight * this.dpr;
+
+        gl.bindTexture(gl.TEXTURE_2D, this.fboTexture);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+        gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbo);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.fboTexture, 0);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    }
+
+    setupEvents() {
+        window.addEventListener('resize', () => {
+            this.resize();
+            if (this.activeChar) this.setShape(this.activeChar);
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            this.mouse[0] = e.clientX;
+            this.mouse[1] = e.clientY;
+
+            if (this.isDragging) {
+                const dx = e.clientX - this.lastMousePos[0];
+                const dy = e.clientY - this.lastMousePos[1];
+                this.targetRotY += dx * 0.01;
+                this.targetRotX += dy * 0.01;
+                this.lastMousePos = [e.clientX, e.clientY];
+            }
+        });
+
+        window.addEventListener('mousedown', (e) => {
+            if (e.button === 0) this.technique = 1; // Blue
+            else if (e.button === 2) this.technique = 2; // Red
+            else if (e.button === 1) this.technique = 3; // Purple
+            
+            this.isDragging = (e.button === 0);
+            this.isMouseDown = true;
+            this.techTime = Date.now() - this.startTime;
+            this.lastMousePos = [e.clientX, e.clientY];
+            document.body.classList.add('grabbing');
+            if (e.button !== 0) e.preventDefault();
+        });
+
+        window.addEventListener('mouseup', () => {
+            this.isDragging = false;
+            this.isMouseDown = false;
+            this.technique = 0;
+            document.body.classList.remove('grabbing');
+        });
+
+        window.addEventListener('contextmenu', e => {
+            if (this.activeChar && this.activeChar.id === 'gojo') e.preventDefault();
+        });
+
+        // Touch support 
+        window.addEventListener('touchstart', (e) => {
+            if (e.touches.length === 1) {
+                this.isDragging = true;
+                this.lastMousePos = [e.touches[0].clientX, e.touches[0].clientY];
+            }
+        });
+
+        window.addEventListener('touchmove', (e) => {
+            if (this.isDragging && e.touches.length === 1) {
+                const dx = e.touches[0].clientX - this.lastMousePos[0];
+                const dy = e.touches[0].clientY - this.lastMousePos[1];
+                this.targetRotY += dx * 0.01;
+                this.targetRotX += dy * 0.01;
+                this.lastMousePos = [e.touches[0].clientX, e.touches[0].clientY];
+            }
+        });
+
+        window.addEventListener('touchend', () => {
+            this.isDragging = false;
+        });
+    }
+
+    initParticles() {
+        const w = window.innerWidth, h = window.innerHeight;
+        for (let i = 0; i < this.particleCount; i++) {
+            const x = (Math.random() - 0.5) * w;
+            const y = (Math.random() - 0.5) * h;
+            const z = (Math.random() - 0.5) * 800;
+            this.positions[i * 3] = x; this.positions[i * 3 + 1] = y; this.positions[i * 3 + 2] = z;
+            this.targets[i * 3] = x; this.targets[i * 3 + 1] = y; this.targets[i * 3 + 2] = z;
+            
+            const c = IDLE_PALETTE[i % IDLE_PALETTE.length];
+            this.colors[i * 3] = c[0] / 255; this.colors[i * 3 + 1] = c[1] / 255; this.colors[i * 3 + 2] = c[2] / 255;
+            this.sizes[i] = Math.random() * 1.5 + 0.5;
+            this.ids[i] = Math.random() * 1000;
+        }
+        this.updateBuffer('pos', this.positions);
+        this.updateBuffer('target', this.targets);
+        this.updateBuffer('color', this.colors);
+        this.updateBuffer('size', this.sizes);
+        this.updateBuffer('id', this.ids);
+        this.updateBuffer('tag', this.tags);
+    }
+
+    updateBuffer(name, data) {
+        const gl = this.gl;
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.bufs[name]);
+        gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+    }
+
+    async setShape(char) {
+        const t = Math.pow(this.transition, 0.6);
+        for (let i = 0; i < this.particleCount; i++) {
+            this.positions[i * 3] = this.positions[i * 3] * (1 - t) + this.targets[i * 3] * t;
+            this.positions[i * 3 + 1] = this.positions[i * 3 + 1] * (1 - t) + this.targets[i * 3 + 1] * t;
+            this.positions[i * 3 + 2] = this.positions[i * 3 + 2] * (1 - t) + this.targets[i * 3 + 2] * t;
+        }
+        this.updateBuffer('pos', this.positions);
+        this.transition = 0; 
+        this.activeChar = char;
+
+        if (!this.coordinateCache[char.id]) {
+            if (char.id === 'gojo') {
+                const pts = [];
+                const count = 30000;
+                for (let i = 0; i < count; i++) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const r = 0.38 + Math.random() * 0.1; 
+                    pts.push({ x: Math.cos(angle) * r, y: Math.sin(angle) * r });
+                }
+                this.coordinateCache[char.id] = { points: pts, ar: 1 };
+            } else if (char.id === 'jogo') {
+                const pts = [];
+                const count = 100000;
+                for (let i = 0; i < count; i++) {
+                    if (i < 80000) { // Mountain Surface
+                        const r = Math.sqrt(Math.random()) * 0.65;
+                        const angle = Math.random() * Math.PI * 2;
+                        const x = Math.cos(angle) * r;
+                        const z = Math.sin(angle) * r; 
+                        let y = (0.65 - r) * 1.1; 
+                        if (r < 0.08) { y -= (0.08 - r) * 0.4; } 
+                        const noise = (Math.random() - 0.5) * 0.03;
+                        pts.push({ x, y: -y + 0.3, z: z + noise, id: Math.random() * 100 }); 
+                    } else { // Eruption/White Smoke
+                        const angle = Math.random() * Math.PI * 2;
+                        const r = Math.random() * 0.04;
+                        pts.push({ 
+                            x: Math.cos(angle) * r, 
+                            y: -0.4, 
+                            z: Math.sin(angle) * r, 
+                            id: 850.0 + Math.random() * 100,
+                            size: 10.0
+                        });
+                    }
+                }
+                this.coordinateCache[char.id] = { points: pts, ar: 1 };
+            } else if (char.id === 'sukuna') {
+                const pts = [];
+                const count = 100000;
+                for (let i = 0; i < count; i++) {
+                    const group = i % 10;
+                    if (group < 3) { // Tiered Bases
+                        const level = i % 3;
+                        const r = 0.6 - level * 0.15;
+                        pts.push({ x: (Math.random()-0.5)*r*2.4, y: 0.4 - level*0.12, z: (Math.random()-0.5)*r*2.4 });
+                    } else if (group < 5) { // Pillars
+                        const px = (i%2==0?1:-1) * 0.45, pz = (Math.floor(i/2)%2==0?1:-1) * 0.45;
+                        pts.push({ x: px, y: (Math.random()-0.5)*1.0, z: pz });
+                    } else { // Pagoda Roofs
+                        const tier = i % 2;
+                        const ty = -0.1 - tier * 0.4;
+                        const tr = 0.8 - tier * 0.3;
+                        const angle = Math.random() * Math.PI * 2;
+                        const rad = Math.sqrt(Math.random()) * tr;
+                        const ry = ty - (tr - rad) * 0.5; 
+                        pts.push({ x: Math.cos(angle)*rad, y: ry, z: Math.sin(angle)*rad });
+                    }
+                }
+                this.coordinateCache[char.id] = { points: pts, ar: 1 };
+            } else if (char.id === 'megumi') {
+                const pts = [];
+                const count = 150000;
+                for (let i = 0; i < count; i++) {
+                    if (i < 120000) { // Whirlpool Spiral
+                        const angle = Math.random() * Math.PI * 18.0; 
+                        const r = Math.sqrt(angle / (Math.PI * 18.0)) * 0.85;
+                        const x = Math.cos(angle) * r;
+                        const z = Math.sin(angle) * r;
+                        const y = (1.0 - r) * 0.2 + (Math.random() - 0.5) * 0.05;
+                        pts.push({ x, y, z });
+                    } else { // Whipping Tendrils
+                        const tIdx = Math.floor(Math.random() * 20);
+                        const angle = Math.random() * Math.PI * 2;
+                        const r = 0.4 + Math.random() * 0.4;
+                        const x = Math.cos(angle) * r;
+                        const z = Math.sin(angle) * r;
+                        const y = -Math.random() * 0.8 - 0.2;
+                        pts.push({ x, y, z, id: 910.0 + tIdx });
+                    }
+                }
+                this.coordinateCache[char.id] = { points: pts, ar: 1 };
+            } else if (char.id === 'mahito') {
+                const pts = [];
+                const handQty = 10;
+                const ptsPerHand = 10000;
+                
+                const rand = () => Math.random();
+                const randN = () => (Math.random() - 0.5);
+
+                const addHand = (hx, hy, hz, hRot) => {
+                    const localPts = [];
+                    // Capsule helper
+                    const capsule = (ax, ay, az, bx, by, bz, radius, count) => {
+                        const dx = bx - ax, dy = by - ay, dz = bz - az;
+                        const len = Math.sqrt(dx*dx + dy*dy + dz*dz) || 1;
+                        const ux = dx/len, uy = dy/len, uz = dz/len;
+                        let vx, vy, vz;
+                        if (Math.abs(ux) < 0.9) { vx=0; vy=-uz; vz=uy; } else { vx=-uy; vy=ux; vz=0; }
+                        const vl = Math.sqrt(vx*vx+vy*vy+vz*vz);
+                        vx/=vl; vy/=vl; vz/=vl;
+                        const wx = uy*vz - uz*vy, wy = uz*vx - ux*vz, wz = ux*vy - uy*vx;
+
+                        for (let i = 0; i < count; i++) {
+                            const t = rand(), rr = radius * (0.75 + rand() * 0.35), ang = rand() * Math.PI * 2;
+                            const px = ax + dx*t + (Math.cos(ang)*vx + Math.sin(ang)*wx) * rr;
+                            const py = ay + dy*t + (Math.cos(ang)*vy + Math.sin(ang)*wy) * rr;
+                            const pz = az + dz*t + (Math.cos(ang)*vz + Math.sin(ang)*wz) * rr;
+                            localPts.push({ x: px, y: py, z: pz });
+                        }
+                    };
+                    // Box helper
+                    const box = (cx, cy, cz, hw, hh, hd, count) => {
+                        for (let i = 0; i < count; i++) {
+                            const face = Math.floor(rand()*6);
+                            let x, y, z; const r = 0.92 + rand()*0.1;
+                            if (face === 0) { x= hw*r; y=randN()*hh; z=randN()*hd; }
+                            else if (face===1){ x=-hw*r; y=randN()*hh; z=randN()*hd; }
+                            else if (face===2){ x=randN()*hw; y= hh*r; z=randN()*hd; }
+                            else if (face===3){ x=randN()*hw; y=-hh*r; z=randN()*hd; }
+                            else if (face===4){ x=randN()*hw; y=randN()*hh; z= hd*r; }
+                            else { x=randN()*hw; y=randN()*hh; z=-hd*r; }
+                            if (Math.abs(x)/hw + Math.abs(y)/hh > 1.9) continue;
+                            localPts.push({ x: cx+x, y: cy+y, z: cz+z });
+                        }
+                    };
+
+                    box(0, 0, 0, 0.22, 0.18, 0.055, ptsPerHand * 0.15); // Palm
+                    const fingers = [
+                        { x: -0.135, y: 0.19, splay: 0.08, len:[0.15,0.11,0.08], r:[0.035,0.03,0.02] },
+                        { x: -0.045, y: 0.20, splay: 0.01, len:[0.16,0.12,0.09], r:[0.04,0.035,0.025] },
+                        { x: 0.045, y: 0.195, splay: -0.01, len:[0.15,0.11,0.08], r:[0.035,0.03,0.02] },
+                        { x: 0.135, y: 0.175, splay: -0.09, len:[0.12,0.08,0.06], r:[0.03,0.025,0.018] }
+                    ];
+                    fingers.forEach(f => {
+                        let bx = f.x, by = f.y, bz = 0;
+                        f.len.forEach((sl, si) => {
+                            const ex = bx + Math.sin(f.splay)*sl, ey = by + Math.cos(f.splay)*sl, ez = bz - si*0.01;
+                            capsule(bx, by, bz, ex, ey, ez, f.r[si], ptsPerHand * 0.12);
+                            bx = ex; by = ey; bz = ez;
+                        });
+                    });
+                    // Thumb
+                    capsule(-0.23, 0.06, 0.02, -0.32, 0.15, 0.02, 0.05, ptsPerHand * 0.1);
+
+                    // Transform to tunnel
+                    const s = 0.8; // Scale
+                    const c = Math.cos(hRot), sn = Math.sin(hRot);
+                    localPts.forEach(p => {
+                        const tx = p.x * s, ty = p.y * s, tz = p.z * s;
+                        const rx = tx * c - tz * sn;
+                        const rz = tx * sn + tz * c;
+                        pts.push({ x: hx + rx, y: hy + ty, z: hz + rz });
+                    });
+                };
+
+                for (let i = 0; i < handQty; i++) {
+                    const ang = (i / handQty) * Math.PI * 2;
+                    const r = 0.6;
+                    addHand(Math.cos(ang)*r, (randN()*0.6), Math.sin(ang)*r, -ang - Math.PI/2);
+                }
+                this.coordinateCache[char.id] = { points: pts, ar: 0.62 };
+            } else {
+                const img = new Image();
+            img.src = char.asset;
+            try {
+                await new Promise((resolve, reject) => {
+                    img.onload = resolve;
+                    img.onerror = () => reject(new Error('Failed: ' + char.asset));
+                });
+            } catch (err) { console.error("Asset Load Failure", err); return; }
+
+            const ow = 256;
+            const oh = Math.round(ow * (img.height / img.width));
+            const oc = document.createElement('canvas'); oc.width = ow; oc.height = oh;
+            const ctx = oc.getContext('2d'); ctx.drawImage(img, 0, 0, ow, oh);
+            const data = ctx.getImageData(0, 0, ow, oh).data;
+            const pts = [];
+            let mnx = 1, mxx = 0, mny = 1, mxy = 0;
+            for (let y = 0; y < oh; y++) {
+                for (let x = 0; x < ow; x++) {
+                    const idx = (y * ow + x) * 4;
+                    const r = data[idx], g = data[idx + 1], b = data[idx + 2];
+                    const nx = x / ow, ny = y / oh;
+                    const distFromCenter = Math.sqrt(Math.pow(nx - 0.5, 2) + Math.pow(ny - 0.5, 2));
+
+                    if (r + g + b > 40 && distFromCenter < 0.48) {
+                        pts.push({ nx, ny });
+                        mnx = Math.min(mnx, nx); mxx = Math.max(mxx, nx);
+                        mny = Math.min(mny, ny); mxy = Math.max(mxy, ny);
+                    }
+                }
+            }
+            const rw = mxx - mnx || 1, rh = mxy - mny || 1;
+            this.coordinateCache[char.id] = {
+                points: pts.map(p => ({ 
+                    x: (p.nx - mnx) / rw - 0.5, 
+                    y: (p.ny - mny) / rh - 0.5,
+                })),
+                ar: rw / rh
+            };
+            }
+        }
+
+        const { points, ar } = this.coordinateCache[char.id];
+        const vw = window.innerWidth, vh = window.innerHeight;
+        const barH = 120, padding = 40;
+        const safeW = vw - padding * 2, safeH = vh - barH - padding * 2;
+
+        let sw, sh;
+        if (ar > (safeW / safeH)) { sw = safeW; sh = sw / ar; }
+        else { sh = safeH; sw = sh * ar; }
+
+        this.currentCenter = [vw / 2, (vh - barH) / 2 + 20];
+
+        const shapeThresh = Math.floor(this.particleCount * 0.85);
+        const volumeDepth = 60.0;
+
+        for (let i = 0; i < this.particleCount; i++) {
+            if (i < shapeThresh) {
+                const p = points[i % points.length];
+                this.targets[i * 3] = p.x * sw + (Math.random() - 0.5) * 4.0;
+                this.targets[i * 3 + 1] = p.y * sh + (Math.random() - 0.5) * 4.0;
+                
+                if (p.z !== undefined) {
+                    this.targets[i * 3 + 2] = p.z * sw; 
+                } else {
+                    // Double-Sided Volumetric Logic
+                    const group = i % 3;
+                    if (group === 0) { // Front Face but i think this one is deprecated for now
+                        this.targets[i * 3 + 2] = volumeDepth * 0.5;
+                    } else if (group === 1) { // Back Face (Recognizable from back)
+                        this.targets[i * 3 + 2] = -volumeDepth * 0.5;
+                        this.targets[i * 3] *= -1; // Mirror X for back visibility
+                    } else { // Fill
+                        this.targets[i * 3 + 2] = (Math.random() - 0.5) * volumeDepth;
+                    }
+                }
+
+                this.tags[i] = 1.0;
+                this.ids[i] = p.id !== undefined ? p.id : Math.random() * 1000;
+                this.sizes[i] = p.size !== undefined ? p.size : (Math.random() * 1.5 + 0.5);
+                const c = char.colors[i % char.colors.length];
+                this.colors[i * 3] = c[0] / 255;
+                this.colors[i * 3 + 1] = c[1] / 255;
+                this.colors[i * 3 + 2] = c[2] / 255;
+            } else {
+                this.targets[i * 3] = (Math.random() - 0.5) * vw * 2.0;
+                this.targets[i * 3 + 1] = (Math.random() - 0.5) * vh * 2.0;
+                this.targets[i * 3 + 2] = (Math.random() - 0.5) * 1200;
+                this.tags[i] = 0.0; 
+                this.colors[i * 3] = 1.0; this.colors[i * 3 + 1] = 1.0; this.colors[i * 3 + 2] = 1.0;
+            }
+        }
+        this.updateBuffer('target', this.targets);
+        this.updateBuffer('color', this.colors);
+        this.updateBuffer('tag', this.tags);
+        this.charIdNum = characters.findIndex(c => c.id === char.id) + 1;
+    }
+
+    setIdle() {
+        const t = this.transition;
+        for (let i = 0; i < this.particleCount; i++) {
+            this.positions[i * 3] = this.positions[i * 3] * (1 - t) + this.targets[i * 3] * t;
+            this.positions[i * 3 + 1] = this.positions[i * 3 + 1] * (1 - t) + this.targets[i * 3 + 1] * t;
+            this.positions[i * 3 + 2] = this.positions[i * 3 + 2] * (1 - t) + this.targets[i * 3 + 2] * t;
+        }
+        this.updateBuffer('pos', this.positions);
+        this.transition = 0;
+        this.activeChar = null;
+        this.charIdNum = 0;
+
+        const w = window.innerWidth, h = window.innerHeight;
+        for (let i = 0; i < this.particleCount; i++) {
+            this.targets[i * 3] = (Math.random() - 0.5) * w * 1.5;
+            this.targets[i * 3 + 1] = (Math.random() - 0.5) * h * 1.5;
+            this.targets[i * 3 + 2] = (Math.random() - 0.5) * 800;
+            this.tags[i] = 0.0;
+            this.colors[i * 3] = 1.0; this.colors[i * 3 + 1] = 1.0; this.colors[i * 3 + 2] = 1.0;
+        }
+        this.updateBuffer('target', this.targets);
+        this.updateBuffer('tag', this.tags);
+        this.updateBuffer('color', this.colors);
+    }
+
+    animate() {
+        const gl = this.gl;
+        const time = Date.now() - this.startTime;
+        
+        this.transition += (1.0 - this.transition) * 0.024;
+        this.rotX += (this.targetRotX - this.rotX) * 0.1;
+        this.rotY += (this.targetRotY - this.rotY) * 0.1;
+
+        if (!this.isDragging) {
+            this.targetRotY += 0.003;
+        }
+
+        // Pass 1: Render Particles to FBO
+        gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbo);
+        gl.viewport(0, 0, window.innerWidth * this.dpr, window.innerHeight * this.dpr);
+        gl.clearColor(0, 0, 0, 0);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+        
+        gl.useProgram(this.program);
+        gl.uniform1f(this.locs.time, time);
+        gl.uniform1f(this.locs.trans, this.transition);
+        gl.uniform1i(this.locs.charId, this.charIdNum || 0);
+        gl.uniform2f(this.locs.mouse, this.mouse[0], this.mouse[1]);
+        gl.uniform2f(this.locs.rotation, this.rotX, this.rotY);
+        gl.uniform1f(this.locs.mousedown, this.isMouseDown ? 1.0 : 0.0);
+        gl.uniform1f(this.locs.tech, this.technique || 0.0);
+        gl.uniform1f(this.locs.techTime, this.techTime || 0.0);
+        if (this.currentCenter) gl.uniform2f(this.locs.center, this.currentCenter[0], this.currentCenter[1]);
+        
+        const bind = (name, loc, size) => {
+            gl.bindBuffer(gl.ARRAY_BUFFER, this.bufs[name]);
+            gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, size, gl.FLOAT, false, 0, 0);
+        };
+        
+        bind('pos', this.locs.pos, 3); bind('target', this.locs.target, 3);
+        bind('color', this.locs.color, 3); bind('size', this.locs.size, 1);
+        bind('id', this.locs.id, 1); bind('tag', this.locs.tag, 1);
+
+        gl.drawArrays(gl.POINTS, 0, this.particleCount);
+
+        // Pass 2: Post-Processing Blit to Screen
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        gl.viewport(0, 0, window.innerWidth * this.dpr, window.innerHeight * this.dpr);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+
+        gl.useProgram(this.postProgram);
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, this.fboTexture);
+        gl.uniform1i(this.postLocs.tex, 0);
+        gl.uniform1f(this.postLocs.time, time);
+        gl.uniform2f(this.postLocs.res, window.innerWidth * this.dpr, window.innerHeight * this.dpr);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.bufs.quad);
+        gl.enableVertexAttribArray(this.postLocs.pos);
+        gl.vertexAttribPointer(this.postLocs.pos, 2, gl.FLOAT, false, 0, 0);
+
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+        
+        // Break feedback loop for next frame
+        gl.bindTexture(gl.TEXTURE_2D, null);
+
+        requestAnimationFrame(() => this.animate());
+    }
+}
+
+const init = () => {
+    const grid = document.getElementById('characterGrid');
+    const info = document.getElementById('domainInfo');
+    const ps = new ParticleSystem();
+
+    characters.forEach(char => {
+        const card = document.createElement('div');
+        card.className = 'character-card';
+        card.innerHTML = `<h3>${char.name}</h3><p>${char.domain}</p>`;
+        
+        card.onclick = e => {
+            e.stopPropagation();
+            const isActive = card.classList.contains('active');
+            document.querySelectorAll('.character-card').forEach(c => c.classList.remove('active'));
+            
+            if (isActive) {
+                document.body.setAttribute('data-theme', 'none');
+                info.classList.remove('visible'); ps.setIdle();
+            } else {
+                card.classList.add('active'); 
+                document.body.setAttribute('data-theme', char.id);
+                document.body.classList.remove('shake'); 
+                void document.body.offsetWidth; 
+                document.body.classList.add('shake');
+                
+                info.classList.add('visible');
+                document.getElementById('infoName').textContent = char.domain;
+                document.getElementById('infoDesc').textContent = char.desc;
+                ps.setShape(char);
+            }
+        };
+        grid.appendChild(card);
+    });
+
+    document.getElementById('ui-layer').onclick = (e) => {
+        if (e.target.id === 'ui-layer' || e.target.id === 'domainInfo') {
+            document.querySelectorAll('.character-card').forEach(c => c.classList.remove('active'));
+            document.body.setAttribute('data-theme', 'none');
+            info.classList.remove('visible'); 
+            ps.setIdle();
+        }
+    };
+};
+
+window.onload = init;
