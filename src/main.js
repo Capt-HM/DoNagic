@@ -4,9 +4,9 @@ const characters = [
     { id: 'gojo', name: 'Gojo', domain: 'Unlimited Void', desc: "Transmits infinite information, paralyzing the target. 👨‍💻👨‍💻", colors: [[255, 255, 255], [200, 200, 200], [100, 100, 100]], asset: '/assets/black_hole.png' },
     { id: 'sukuna', name: 'Sukuna', domain: 'Malevolent Shrine', desc: "A divine shrine that slashes everything in range.☠️☠️", colors: [[255, 30, 30], [150, 0, 0], [45, 52, 54]], asset: '/assets/sukuna.png' },
     { id: 'megumi', name: 'Megumi', domain: 'Shadow Garden', desc: "Fills the area with shadows and summoned beasts.💪💪", colors: [[0, 255, 255], [0, 168, 255], [255, 255, 255]], asset: '/assets/megumi.png' },
-    { id: 'mahito', name: 'Mahito', domain: 'Self-Perfection', desc: "Directly transfigures souls within its reach.", colors: [[255, 126, 185], [255, 180, 200], [223, 230, 233]], asset: '/assets/mahito.png' },
-    { id: 'jogo', name: 'Jogo', domain: 'Iron Mountain', desc: "Incinerates targets inside an active volcanic space.", colors: [[255, 69, 0], [255, 140, 0], [255, 215, 0]], asset: '/assets/jogo.png' },
-    { id: 'hakari', name: 'Hakari', domain: 'Death Gamble', desc: "A Pachinko game granting infinite energy.", colors: [[255, 0, 150], [0, 168, 255], [255, 215, 0]], asset: '/assets/hakari.png' }
+    { id: 'mahito', name: 'Mahito', domain: 'Self-Perfection', desc: "Directly transfigures souls within its reach.👯‍♂️", colors: [[255, 126, 185], [255, 180, 200], [223, 230, 233]], asset: '/assets/mahito.png' },
+    { id: 'jogo', name: 'Jogo', domain: 'Iron Mountain', desc: "Incinerates targets inside an active volcanic space.🌋", colors: [[255, 69, 0], [255, 140, 0], [255, 215, 0]], asset: '/assets/jogo.png' },
+    { id: 'hakari', name: 'Hakari', domain: 'Death Gamble', desc: "A Pachinko game granting infinite energy.🎰", colors: [[255, 0, 150], [0, 168, 255], [255, 215, 0]], asset: '/assets/hakari.png' }
 ];
 
 const IDLE_PALETTE = [[255, 255, 255], [200, 200, 255], [162, 155, 254], [108, 92, 231]];
